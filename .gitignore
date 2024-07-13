@@ -1,0 +1,11 @@
+
+/target
+/venv
+/.venv
+
+*.so
+*.pyc
+*.so
+*.dll
+*.pyd
+
