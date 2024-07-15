@@ -53,6 +53,7 @@ with pl.Config(tbl_rows=-1, tbl_cols=-1, fmt_str_lengths=80):
     print(result)
 
 
+print('\n-------------------------------------------------------------------------------------------------\n')
 
 with pl.Config(tbl_rows=-1, tbl_cols=-1, fmt_str_lengths=80):
     df = pl.DataFrame({

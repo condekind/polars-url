@@ -15,27 +15,27 @@ struct ExtractFieldKwarg {
 mod field {
     use url::Url;
 
-    pub fn nothing(_url: Url) -> String {
+    pub fn nothing(_url: &Url) -> String {
         String::from("")
     }
 
-    pub fn scheme(url: Url) -> String {
+    pub fn scheme(url: &Url) -> String {
         String::from(url.scheme())
     }
 
-    pub fn username(url: Url) -> String {
+    pub fn username(url: &Url) -> String {
         String::from(url.username())
     }
 
-    pub fn password(url: Url) -> String {
+    pub fn password(url: &Url) -> String {
         String::from(url.password().unwrap_or(""))
     }
 
-    pub fn host(url: Url) -> String {
+    pub fn host(url: &Url) -> String {
         String::from(url.host_str().unwrap_or(""))
     }
 
-    pub fn port(url: Url) -> String {
+    pub fn port(url: &Url) -> String {
         if let Some(port) = url.port() {
             port.to_string()
         } else {
@@ -43,19 +43,19 @@ mod field {
         }
     }
 
-    pub fn path(url: Url) -> String {
+    pub fn path(url: &Url) -> String {
         String::from(url.path())
     }
 
-    pub fn query(url: Url) -> String {
+    pub fn query(url: &Url) -> String {
         String::from(url.query().unwrap_or(""))
     }
 
-    pub fn fragment(url: Url) -> String {
+    pub fn fragment(url: &Url) -> String {
         String::from(url.fragment().unwrap_or(""))
     }
 
-    pub fn field_getter(field: &str) -> fn(url::Url) -> std::string::String {
+    pub fn field_getter(field: &str) -> fn(&url::Url) -> std::string::String {
         match field {
             "scheme" => scheme,
             "username" => username,
@@ -79,7 +79,7 @@ fn parse_url(inputs: &[Series], kwargs: ExtractFieldKwarg) -> PolarsResult<Serie
 
     let out = ca.apply_to_buffer(|url_str: &str, output: &mut String| {
         if let Ok(url) = Url::parse(url_str) {
-            let _ = write!(output, "{}", get_field(url));
+            let _ = write!(output, "{}", get_field(&url));
         } else {
             let _ = write!(output, "");
         };
@@ -89,41 +89,37 @@ fn parse_url(inputs: &[Series], kwargs: ExtractFieldKwarg) -> PolarsResult<Serie
 
 #[polars_expr(output_type=String)]
 fn extract_field_from_series(inputs: &[Series]) -> PolarsResult<Series> {
-    let ca = inputs[0].str()?;
-    let fields = inputs[1].str()?;
+    let ca: &StringChunked = inputs[0].str()?;
+    let fields: &StringChunked = inputs[1].str()?;
 
     let out: StringChunked = match (ca.len(), fields.len()) {
         (_, 1) => {
             let get_field = field_getter(fields.get(0).unwrap());
             ca.apply_to_buffer(|url_str, output| {
                 if let Ok(url) = Url::parse(url_str) {
-                    let _ = write!(output, "{}", get_field(url));
-                } else {
-                    let _ = write!(output, "");
+                    let _ = write!(output, "{}", get_field(&url));
                 }
             })
         }
-        (1, _) => broadcast_binary_elementwise(
-            ca,
-            fields,
-            |url_str: Option<&str>, field: Option<&str>| {
-                if let (Some(url_str), Some(field)) = (url_str, field) {
-                    let get_field = field_getter(field);
-                    if let Ok(url) = Url::parse(url_str) {
-                        get_field(url)
+        (1, _) => {
+            if let Ok(url) = Url::parse(ca.get(0).unwrap()) {
+                broadcast_binary_elementwise(ca, fields, |_: Option<&str>, field: Option<&str>| {
+                    if let Some(field) = field {
+                        let get_field = field_getter(field);
+                        get_field(&url)
                     } else {
                         String::from("")
                     }
-                } else {
-                    String::from("")
-                }
-            },
-        ),
+                })
+            } else {
+                ca.clone()
+            }
+        }
         _ => binary_elementwise(ca, fields, |url_str: Option<&str>, field: Option<&str>| {
             if let (Some(url_str), Some(field)) = (url_str, field) {
                 let get_field = field_getter(field);
                 if let Ok(url) = Url::parse(url_str) {
-                    get_field(url)
+                    get_field(&url)
                 } else {
                     String::from("")
                 }
