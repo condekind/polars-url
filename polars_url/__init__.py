@@ -13,16 +13,6 @@ if TYPE_CHECKING:
 lib = Path(__file__).parent
 
 
-def add_suffix(expr: IntoExpr, *, suffix: str) -> pl.Expr:
-    return register_plugin(
-        args=[expr],
-        lib=lib,
-        symbol="add_suffix",
-        is_elementwise=True,
-        kwargs={"suffix": suffix},
-    )
-
-
 def parse_url(expr: IntoExpr, *, field: str) -> pl.Expr:
     return register_plugin(
         args=[expr],

@@ -1,6 +1,6 @@
 #![allow(clippy::unused_unit)]
 use crate::expressions::field::field_getter;
-use polars::prelude::arity::binary_elementwise;
+use polars::prelude::arity::{binary_elementwise, broadcast_binary_elementwise};
 use polars::prelude::*;
 use pyo3_polars::derive::polars_expr;
 use serde::Deserialize;
@@ -92,8 +92,34 @@ fn extract_field_from_series(inputs: &[Series]) -> PolarsResult<Series> {
     let ca = inputs[0].str()?;
     let fields = inputs[1].str()?;
 
-    let out: StringChunked =
-        binary_elementwise(ca, fields, |url_str: Option<&str>, field: Option<&str>| {
+    let out: StringChunked = match (ca.len(), fields.len()) {
+        (_, 1) => {
+            let get_field = field_getter(fields.get(0).unwrap());
+            ca.apply_to_buffer(|url_str, output| {
+                if let Ok(url) = Url::parse(url_str) {
+                    let _ = write!(output, "{}", get_field(url));
+                } else {
+                    let _ = write!(output, "");
+                }
+            })
+        }
+        (1, _) => broadcast_binary_elementwise(
+            ca,
+            fields,
+            |url_str: Option<&str>, field: Option<&str>| {
+                if let (Some(url_str), Some(field)) = (url_str, field) {
+                    let get_field = field_getter(field);
+                    if let Ok(url) = Url::parse(url_str) {
+                        get_field(url)
+                    } else {
+                        String::from("")
+                    }
+                } else {
+                    String::from("")
+                }
+            },
+        ),
+        _ => binary_elementwise(ca, fields, |url_str: Option<&str>, field: Option<&str>| {
             if let (Some(url_str), Some(field)) = (url_str, field) {
                 let get_field = field_getter(field);
                 if let Ok(url) = Url::parse(url_str) {
@@ -104,7 +130,8 @@ fn extract_field_from_series(inputs: &[Series]) -> PolarsResult<Series> {
             } else {
                 String::from("")
             }
-        });
+        }),
+    };
 
     Ok(out.into_series())
 }
