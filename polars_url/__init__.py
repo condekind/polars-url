@@ -30,3 +30,12 @@ def extract_field_from_series(urls: IntoExpr, fields: IntoExpr) -> pl.Expr:
         is_elementwise=True,
         lib=lib,
     )
+
+
+def extract_field_from_series_noopt(urls: IntoExpr, fields: IntoExpr) -> pl.Expr:
+    return register_plugin(
+        args=[urls, fields],
+        symbol="extract_field_from_series_noopt",
+        is_elementwise=True,
+        lib=lib,
+    )

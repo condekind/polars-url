@@ -87,6 +87,8 @@ fn parse_url(inputs: &[Series], kwargs: ExtractFieldKwarg) -> PolarsResult<Serie
     Ok(out.into_series())
 }
 
+/// Takes two Series: one with URL strings, another with the name of Url fields
+/// to be extracted.
 #[polars_expr(output_type=String)]
 fn extract_field_from_series(inputs: &[Series]) -> PolarsResult<Series> {
     let ca: &StringChunked = inputs[0].str()?;
@@ -101,18 +103,14 @@ fn extract_field_from_series(inputs: &[Series]) -> PolarsResult<Series> {
                 }
             })
         }
-        (1, _) => {
+        (1, fields_len) => {
             if let Ok(url) = Url::parse(ca.get(0).unwrap()) {
-                broadcast_binary_elementwise(ca, fields, |_: Option<&str>, field: Option<&str>| {
-                    if let Some(field) = field {
-                        let get_field = field_getter(field);
-                        get_field(&url)
-                    } else {
-                        String::from("")
-                    }
+                fields.apply_to_buffer(|field, output| {
+                    let get_field = field_getter(field);
+                    let _ = write!(output, "{}", get_field(&url));
                 })
             } else {
-                ca.clone()
+                StringChunked::full_null(ca.name(), fields_len)
             }
         }
         _ => binary_elementwise(ca, fields, |url_str: Option<&str>, field: Option<&str>| {
@@ -128,6 +126,28 @@ fn extract_field_from_series(inputs: &[Series]) -> PolarsResult<Series> {
             }
         }),
     };
+
+    Ok(out.into_series())
+}
+
+#[polars_expr(output_type=String)]
+fn extract_field_from_series_noopt(inputs: &[Series]) -> PolarsResult<Series> {
+    let ca: &StringChunked = inputs[0].str()?;
+    let fields: &StringChunked = inputs[1].str()?;
+
+    let out: StringChunked =
+        broadcast_binary_elementwise(ca, fields, |url_str: Option<&str>, field: Option<&str>| {
+            if let (Some(url_str), Some(field)) = (url_str, field) {
+                let get_field = field_getter(field);
+                if let Ok(url) = Url::parse(url_str) {
+                    get_field(&url)
+                } else {
+                    String::from("")
+                }
+            } else {
+                String::from("")
+            }
+        });
 
     Ok(out.into_series())
 }

@@ -2,6 +2,7 @@
 /target
 /venv
 /.venv
+/tmp.d
 
 *.so
 *.pyc
